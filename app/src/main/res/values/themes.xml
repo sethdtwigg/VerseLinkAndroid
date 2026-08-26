@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Minimal theme; inherits AppCompat so settings screens need no extra libs -->
+    <style name="Theme.VerseLink" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/verselink_primary</item>
+        <item name="android:statusBarColor">@color/verselink_primary</item>
+    </style>
+
+    <!-- Invisible trampoline activity (VerseLinkActionActivity) -->
+    <style name="Theme.VerseLink.Translucent">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
+</resources>

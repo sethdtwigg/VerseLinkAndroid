@@ -1,0 +1,17 @@
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+**/build/
+/captures
+.externalNativeBuild
+.cxx
+
+# Signing material: never commit keys/passwords.
+keystore.properties
+keystore/*.jks
+
+# Build outputs
+*.apk
+*.aab

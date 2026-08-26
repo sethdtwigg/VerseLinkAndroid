@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+      No runtime permissions needed: parsing + verse lookup are fully local.
+      WRITE_SECURE_SETTINGS is declared but NOT user-grantable: it is granted
+      once via adb (see README) to enable silent keyboard switching. Without
+      it the app falls back to the system IME picker.
+    -->
+    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" />
+
+
+    <application
+        android:allowBackup="true"
+        android:icon="@drawable/ic_verselink"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.VerseLink">
+
+        <!-- Launcher / onboarding screen -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Settings (translation choice, formatting toggles) -->
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="false"
+            android:label="@string/settings_title" />
+
+        <!--
+          Invisible trampoline feeding the IME pipeline: appears in the share
+          sheet as "VerseLink" (ACTION_SEND) and accepts explicit intents.
+        -->
+        <activity
+            android:name=".VerseLinkActionActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@style/Theme.VerseLink.Translucent">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
+
+        <!--
+          PRIMARY selection-menu integration: shows "VerseLink" in the
+          standard text-selection overflow menu on every device (API 23+).
+          When invoked, we resolve the verse and return EXTRA_PROCESS_TEXT;
+          the platform TextView/EditText then replaces the selection itself -
+          the exact mechanism behind Google Translate's "Translate" action.
+
+          NOTE: the originally-planned TextClassifierService route is not
+          viable in a third-party APK: android.service.textclassifier was
+          removed from the public SDK and the OS resolves the system text
+          classifier with MATCH_SYSTEM_ONLY (OEM builds only). See README.
+        -->
+        <activity
+            android:name=".ProcessTextActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:label="@string/action_verselink">
+            <intent-filter>
+                <action android:name="android.intent.action.PROCESS_TEXT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
+
+        <!--
+          Minimal IME: secondary path. Used when an app's editor does not
+          honour PROCESS_TEXT results (some browser/webview fields), or when
+          the user prefers keyboard-driven insertion. Also demonstrates the
+          replace-selection + switch-back flow.
+        -->
+        <service
+            android:name=".ime.VerseLinkImeService"
+            android:exported="true"
+            android:label="@string/ime_label"
+            android:permission="android.permission.BIND_INPUT_METHOD">
+            <intent-filter>
+                <action android:name="android.view.InputMethod" />
+            </intent-filter>
+            <meta-data
+                android:name="android.view.im"
+                android:resource="@xml/method" />
+        </service>
+    </application>
+</manifest>

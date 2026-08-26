@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Simple app icon: open book with a cross -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#3F51B5"
+        android:pathData="M21,5c-1.11,-0.35 -2.33,-0.5 -3.5,-0.5c-1.95,0 -4.05,0.4 -5.5,1.5c-1.45,-1.1 -3.55,-1.5 -5.5,-1.5S2.45,4.9 1,6v14.65c0,0.25 0.25,0.5 0.5,0.5c0.1,0 0.15,-0.05 0.25,-0.05C3.1,20.45 5.05,20 6.5,20c1.95,0 4.05,0.4 5.5,1.5c1.35,-0.85 3.8,-1.5 5.5,-1.5c1.65,0 3.35,0.3 4.75,1.05c0.1,0.05 0.15,0.05 0.25,0.05c0.25,0 0.5,-0.25 0.5,-0.5V6C22.4,5.55 21.75,5.25 21,5zM13,17.5V8c1.35,-0.85 3.8,-1.5 5.5,-1.5c0.55,0 1.05,0.05 1.5,0.13v10.12c-0.5,-0.08 -1,-0.12 -1.5,-0.12C16.8,16.62 14.7,17.07 13,17.5z" />
+    <path
+        android:fillColor="#FFD54F"
+        android:pathData="M11,10h1.5v1.5h1.5v1h-1.5V14H11v-1.5H9.5v-1H11z"
+        android:strokeWidth="0.5" />
+</vector>
