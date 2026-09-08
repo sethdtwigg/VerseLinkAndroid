@@ -101,8 +101,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
-            android:background="?android:attr/colorBackground"
-            android:padding="12dp"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp"
             android:textColor="?android:attr/textColorSecondary"
             android:textSize="13sp" />
 

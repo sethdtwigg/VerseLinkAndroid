@@ -149,7 +149,10 @@ class SettingsActivity : Activity() {
                     Toast.makeText(this, R.string.no_imported_translations, Toast.LENGTH_SHORT).show()
                     return@setOnClickListener
                 }
-                android.app.AlertDialog.Builder(this)
+                // Explicit device-default dialog theme: this Activity carries an
+                // AppCompat theme but is not an AppCompatActivity, so a framework
+                // dialog left to inherit it can come out mis-styled in dark mode.
+                android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
                     .setTitle(R.string.delete_translation_title)
                     .setItems(imported.toTypedArray()) { _, which ->
                         deleteTranslation(imported[which])
