@@ -198,13 +198,16 @@ class VerseLinkImeService : InputMethodService() {
         }
     }
 
-    /** Button labels stay short: "John 3:16-17" not the whole selection. */
+    /**
+     * Button labels stay short: "John 3:16-17" not the whole selection.
+     *
+     * Uses the engine's canonical label rather than rebuilding one here - the
+     * hand-rolled version always appended ":verseStart", so a whole-chapter
+     * reference offered "Replace Psalms 23:1" for what is simply Psalms 23.
+     */
     private fun shorten(raw: String): String {
         val engine = com.verselink.android.EngineProvider.get(applicationContext)
-        return engine.tryParseReference(raw)?.let {
-            "${it.book} ${it.chapter}:${it.verseStart}" +
-                (it.verseEnd?.let { e -> "-$e" } ?: "")
-        } ?: raw.take(20)
+        return engine.tryParseReference(raw)?.let { engine.referenceLabel(it) } ?: raw.take(20)
     }
 
     // ---- Actions ----

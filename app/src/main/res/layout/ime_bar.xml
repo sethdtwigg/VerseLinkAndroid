@@ -1,14 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   The VerseLink keyboard is a status line plus two buttons, not a typing
-  keyboard. Colours come from theme attributes so the bar follows the device's
-  light/dark setting - it used to hard-code a light grey background and inherit
-  the default text colour, which could render light-on-light in dark mode.
+  keyboard. Colours come from values/values-night resources so the bar follows
+  the device's light/dark setting - it used to hard-code a light grey
+  background and inherit the default text colour.
+
+  These are deliberately NOT theme attributes: an InputMethodService themes
+  itself with android:style/Theme.InputMethod, which is light, so
+  ?android:attr/colorBackground stays light on a dark-themed device. Resource
+  qualifiers follow the configuration instead, which the process does receive.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="?android:attr/colorBackground"
+    android:background="@color/ime_background"
     android:orientation="vertical"
     android:paddingLeft="16dp"
     android:paddingTop="12dp"
@@ -19,7 +24,7 @@
         android:id="@+id/ime_status"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:textColor="?android:attr/textColorPrimary"
+        android:textColor="@color/ime_text"
         android:textSize="14sp" />
 
     <LinearLayout
