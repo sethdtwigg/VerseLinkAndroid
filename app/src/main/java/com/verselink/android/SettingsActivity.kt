@@ -17,6 +17,7 @@ import android.widget.Toast
 import com.verselink.android.engine.AssetBibleRepository
 import com.verselink.android.engine.VerselinkBibleEngine
 import com.verselink.android.util.CrashLog
+import com.verselink.android.util.TranslationFileName
 import java.io.File
 import kotlin.concurrent.thread
 
@@ -226,7 +227,10 @@ class SettingsActivity : Activity() {
         thread(name = "verselink-import") {
             var staged: File? = null
             val ok = runCatching {
-                val safeName = disambiguate(sanitiseName(queryDisplayName(uri)))
+                val safeName = TranslationFileName.disambiguate(
+                    TranslationFileName.sanitise(queryDisplayName(uri)),
+                    repository.bundledVersions()
+                )
                 val destDir = File(filesDir, "bibles").apply { mkdirs() }
                 val temp = File(destDir, "$safeName.part")
                 staged = temp
@@ -266,33 +270,6 @@ class SettingsActivity : Activity() {
                 }
             }
         }
-    }
-
-    /**
-     * Keeps an import off a bundled asset name. open() resolves assets before
-     * filesDir, so an imported "KJV.xml" would be listed but never loaded;
-     * importing it as "KJV-2.xml" keeps both reachable.
-     */
-    private fun disambiguate(name: String): String {
-        val bundled = repository.bundledVersions()
-        if (name !in bundled) return name
-        val stem = name.removeSuffix(".xml")
-        var n = 2
-        while ("$stem-$n.xml" in bundled) n++
-        return "$stem-$n.xml"
-    }
-
-    /** Bare, whitelisted, .xml-suffixed filename - never a path. */
-    private fun sanitiseName(displayName: String?): String {
-        val base = displayName
-            ?.substringAfterLast('/')
-            ?.substringAfterLast('\\')
-            ?.filter { it.isLetterOrDigit() || it in ALLOWED_NAME_CHARS }
-            ?.trim()
-            ?.trimStart('.')
-            .orEmpty()
-        val name = base.ifEmpty { "IMPORTED_${System.currentTimeMillis()}" }
-        return if (name.endsWith(".xml", ignoreCase = true)) name else "$name.xml"
     }
 
     private fun queryDisplayName(uri: Uri): String? =
@@ -344,6 +321,5 @@ class SettingsActivity : Activity() {
         private const val REQUEST_IMPORT = 41
         /** Sample rendered in the formatting preview. */
         private const val PREVIEW_REFERENCE = "John 3:16-17"
-        private const val ALLOWED_NAME_CHARS = "._- "
     }
 }
