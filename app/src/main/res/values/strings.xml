@@ -38,6 +38,13 @@
     <string name="translation_loaded">Loaded %1$s</string>
     <string name="import_ok">Translation imported</string>
     <string name="import_failed">Import failed - file must be a valid VerseLink Bible XML</string>
+    <string name="delete_translation">Delete imported translation…</string>
+    <string name="delete_translation_title">Delete which translation?</string>
+    <string name="no_imported_translations">No imported translations - only the bundled ones are installed</string>
+    <string name="translation_deleted">Deleted %1$s</string>
+    <string name="delete_failed">Could not delete %1$s</string>
+    <string name="preview_header">Preview</string>
+    <string name="preview_unavailable">Preview unavailable - check the selected translation</string>
 
     <!-- IME strings -->
     <string name="ime_scanning">Reading field…</string>

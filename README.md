@@ -1,5 +1,7 @@
 # VerseLink for Android
 
+[![CI](https://github.com/sethdtwigg/VerseLinkAndroid/actions/workflows/ci.yml/badge.svg)](https://github.com/sethdtwigg/VerseLinkAndroid/actions/workflows/ci.yml)
+
 Select a Bible reference like `John 3:16` in any app, tap **VerseLink** in the
 text-selection menu, and the reference is replaced in place with the full verse
 text — the Android companion to [VerseLinkWindows](https://github.com/sethdtwigg/VerseLinkWindows),
@@ -13,12 +15,18 @@ sharing the same parser behaviour and the same Bible XML data files.
   text — no copy/paste, no clipboard touching.
 - **Same parsing as Windows**: all nine reference patterns are ported
   one-for-one (single verses, ranges incl. en/em dashes, cross-chapter ranges,
-  comma lists, chapter/book ranges, ~200 book aliases).
+  comma lists, chapter/book ranges, ~200 book aliases) - plus multi-word book
+  names such as `Song of Solomon 2:1` and `1st John 2:1`, which the upstream
+  single-word book token could not handle.
 - **Same data format**: drop `KJV.xml`, `NASB.xml`, `ESV.xml` etc. straight in;
-  KJV (public domain) is bundled. Import others from the Settings screen.
+  KJV (public domain) is bundled. Import and remove others from the Settings
+  screen; an import is validated before it replaces anything.
 - **Formatting options** mirroring Windows config.json: include reference,
   reference on first line, dynamic reference, verse numbers, new lines between
-  chapters/books.
+  chapters/books - with a live preview in Settings showing exactly what the
+  current combination produces.
+- **Read-only sources**: where the platform cannot write the selection back
+  (non-editable views), the resolved verse goes to the clipboard instead.
 - **Optional VerseLink keyboard (IME)**: minimal keyboard that inserts a
   resolved verse at the cursor and hands control back to your normal keyboard.
   Useful in apps whose editors ignore PROCESS_TEXT results (some webviews).
@@ -119,6 +127,9 @@ parsing the real bundled KJV). On-device checks:
 | 13 | Chapter/book labels | Select `Psalm 23`, `John 1-2`, `Genesis - Exodus` | Label has no invented `:1` |
 | 14 | Read-only source | Select a ref in a non-editable view → VerseLink | Verse copied to clipboard |
 | 15 | Bad import | Import a non-Bible XML | "Import failed"; previous translation still works |
+| 16 | Delete translation | Settings -> Delete imported translation | Entry gone; bundled KJV still selectable |
+| 17 | Formatting preview | Toggle any formatting flag in Settings | Preview updates to match |
+| 18 | Multi-reference | Select `John 3:16; Romans 8:28` | Each verse carries its own label |
 
 ## Limitations & platform notes
 

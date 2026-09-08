@@ -378,6 +378,24 @@ class ReferenceParserTest {
         assertEquals("Romans", refs[1].book)
     }
 
+    @Test fun `each reference in a selection keeps its own label`() {
+        val out = engine.getReplacementText(engine.tryParseReferences("John 3:16; Romans 8:28"))
+        assertEquals(
+            "John 3:16 For God so loved the world, that he gave his only begotten Son... " +
+                "Romans 8:28 And we know that all things work together for good...",
+            out
+        )
+    }
+
+    @Test fun `per reference labels go on their own lines when configured`() {
+        val e = engineWith("firstLine" to true)
+        val out = e.getReplacementText(e.tryParseReferences("John 3:16; Romans 8:28"))
+        val lines = out!!.lines()
+        assertEquals(4, lines.size)
+        assertEquals("John 3:16", lines[0])
+        assertEquals("Romans 8:28", lines[2])
+    }
+
     // ---------- Range iteration is bounded by the data ----------
 
     @Test fun `chapter lookup stops at the last verse that exists`() {

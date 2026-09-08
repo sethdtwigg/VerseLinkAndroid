@@ -36,6 +36,12 @@
             android:layout_height="wrap_content"
             android:text="@string/import_translation" />
 
+        <Button
+            android:id="@+id/btn_delete_translation"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/delete_translation" />
+
         <!-- Formatting options - mirror the Windows config.json flags -->
         <TextView
             android:layout_width="match_parent"
@@ -80,6 +86,25 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/pref_new_line_books" />
+
+        <!-- Live sample so the six flags above explain themselves -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/preview_header"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/txt_preview"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:background="?android:attr/colorBackground"
+            android:padding="12dp"
+            android:textColor="?android:attr/textColorSecondary"
+            android:textSize="13sp" />
 
         <TextView
             android:layout_width="match_parent"

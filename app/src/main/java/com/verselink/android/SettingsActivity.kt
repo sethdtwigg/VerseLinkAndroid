@@ -15,6 +15,7 @@ import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 import com.verselink.android.engine.AssetBibleRepository
+import com.verselink.android.engine.VerselinkBibleEngine
 import com.verselink.android.util.CrashLog
 import java.io.File
 import kotlin.concurrent.thread
@@ -38,6 +39,9 @@ class SettingsActivity : Activity() {
      */
     private var spinnerReady = false
 
+    /** Guards against out-of-order preview results when toggles fly. */
+    private var previewToken = 0
+
     override fun onCreate(savedInstanceState: Bundle?) {
         CrashLog.install(this)
 
@@ -53,8 +57,10 @@ class SettingsActivity : Activity() {
             bindMasterSwitch()
             bindTranslationSpinner()
             bindImportButton()
+            bindDeleteButton()
             bindFormattingChecks()
             bindSwitchingStatus()
+            refreshPreview()
 
             Log.d(TAG, "All bindings complete")
         } catch (e: Exception) {
@@ -105,6 +111,7 @@ class SettingsActivity : Activity() {
                             runOnUiThread {
                                 Toast.makeText(this@SettingsActivity,
                                     getString(R.string.translation_loaded, chosen), Toast.LENGTH_SHORT).show()
+                                refreshPreview()
                             }
                         }
                     }
@@ -127,6 +134,71 @@ class SettingsActivity : Activity() {
             }
         } catch (e: Exception) {
             CrashLog.log(this, e)
+        }
+    }
+
+    /**
+     * Imported translations are otherwise permanent - short of clearing app
+     * data there was no way to remove one. Bundled assets are not offered.
+     */
+    private fun bindDeleteButton() {
+        try {
+            findViewById<Button>(R.id.btn_delete_translation).setOnClickListener {
+                val imported = repository.importedVersions()
+                if (imported.isEmpty()) {
+                    Toast.makeText(this, R.string.no_imported_translations, Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+                android.app.AlertDialog.Builder(this)
+                    .setTitle(R.string.delete_translation_title)
+                    .setItems(imported.toTypedArray()) { _, which ->
+                        deleteTranslation(imported[which])
+                    }
+                    .setNegativeButton(R.string.cancel, null)
+                    .show()
+            }
+        } catch (e: Exception) {
+            CrashLog.log(this, e)
+        }
+    }
+
+    private fun deleteTranslation(name: String) {
+        val deleted = repository.deleteImported(name)
+        if (deleted && VerselinkPrefs.translation(this) == name) {
+            // The active translation just went away; fall back to the bundled
+            // default rather than leaving a dangling selection.
+            VerselinkPrefs.setTranslation(this, AssetBibleRepository.DEFAULT_VERSION)
+        }
+        Toast.makeText(
+            this,
+            getString(if (deleted) R.string.translation_deleted else R.string.delete_failed, name),
+            Toast.LENGTH_SHORT
+        ).show()
+        if (deleted) {
+            bindTranslationSpinner()
+            refreshPreview()
+        }
+    }
+
+    /**
+     * Renders a sample reference with the flags as they stand, so the six
+     * checkboxes are self-explanatory. Resolution can touch the bible file, so
+     * it runs off the main thread; [previewToken] drops out-of-order results
+     * when several toggles are flipped quickly.
+     */
+    private fun refreshPreview() {
+        val token = ++previewToken
+        val options = VerselinkPrefs.formatterOptions(this)
+        thread(name = "verselink-preview") {
+            val engine = VerselinkBibleEngine(repository, options)
+            val text = runCatching {
+                engine.getReplacementText(engine.tryParseReferences(PREVIEW_REFERENCE))
+            }.getOrNull()
+            runOnUiThread {
+                if (token != previewToken) return@runOnUiThread
+                findViewById<TextView>(R.id.txt_preview)?.text =
+                    text ?: getString(R.string.preview_unavailable)
+            }
         }
     }
 
@@ -185,7 +257,10 @@ class SettingsActivity : Activity() {
                     if (ok) R.string.import_ok else R.string.import_failed,
                     Toast.LENGTH_LONG
                 ).show()
-                if (ok) bindTranslationSpinner()
+                if (ok) {
+                    bindTranslationSpinner()
+                    refreshPreview()
+                }
             }
         }
     }
@@ -230,6 +305,7 @@ class SettingsActivity : Activity() {
                 cb.isChecked = VerselinkPrefs.getFlag(this, flag.key, flag.default)
                 cb.setOnCheckedChangeListener { _, checked ->
                     VerselinkPrefs.setFlag(this, flag.key, checked)
+                    refreshPreview()
                 }
             }
         } catch (e: Exception) {
@@ -263,6 +339,8 @@ class SettingsActivity : Activity() {
 
     companion object {
         private const val REQUEST_IMPORT = 41
+        /** Sample rendered in the formatting preview. */
+        private const val PREVIEW_REFERENCE = "John 3:16-17"
         private const val ALLOWED_NAME_CHARS = "._- "
     }
 }

@@ -39,19 +39,21 @@ class VerselinkBibleEngine(
         if (refs.isEmpty()) return null
 
         // Verse-number prefixing already happened inside renderVerse, so
-        // assembling + joining is all that remains (matches Windows output
+        // assembling + labelling is all that remains (matches Windows output
         // where getVersesFromChapter inserted the numbers during collection).
-        val bodies = refs.mapNotNull { ref ->
-            assembleBody(ref).takeIf { it.isNotBlank() }
+        //
+        // Each reference carries its OWN label: a selection like
+        // "John 3:16; Romans 8:28" used to emit one leading "John 3:16" for
+        // the whole thing, filing the Romans text under the wrong reference.
+        val blocks = refs.mapNotNull { ref ->
+            val body = clean(assembleBody(ref)).takeIf { it.isNotEmpty() }
+                ?: return@mapNotNull null
+            if (!options.includeReferenceInReplacement) return@mapNotNull body
+            val label = referenceLabel(ref)
+            if (options.referenceOnFirstLine) "$label\n$body" else "$label $body"
         }
-        if (bodies.isEmpty()) return null
-        val body = clean(bodies.joinToString(" "))
-        if (body.isEmpty()) return null
-
-        if (!options.includeReferenceInReplacement) return body
-
-        val label = referenceLabel(refs.first())
-        return if (options.referenceOnFirstLine) "$label\n$body" else "$label $body"
+        if (blocks.isEmpty()) return null
+        return blocks.joinToString(if (options.referenceOnFirstLine) "\n" else " ")
     }
 
     /** Port of prepareResult(): collapse runs of spaces/tabs, drop \r, trim. */

@@ -56,19 +56,30 @@ class AssetBibleRepository(private val context: Context) : BibleTextProvider {
         context.assets.list("bibles")?.toList() ?: emptyList()
     }.getOrDefault(emptyList())
 
+    /** Translations the user imported through Settings. */
+    fun importedVersions(): List<String> =
+        importedDir().listFiles { f -> f.extension == "xml" }?.map { it.name }?.sorted()
+            ?: emptyList()
+
+    /** Removes an imported translation. Bundled ones are never touched. */
+    fun deleteImported(versionFile: String): Boolean {
+        if (versionFile !in importedVersions()) return false
+        val deleted = java.io.File(importedDir(), versionFile).delete()
+        if (deleted) invalidate()
+        return deleted
+    }
+
+    fun importedDir(): java.io.File = java.io.File(context.filesDir, "bibles")
+
     /** Lists bundled assets plus user-imported translations (filesDir/bibles). */
-    fun availableVersions(): List<String> {
-        val importedDir = java.io.File(context.filesDir, "bibles")
-        val imported = importedDir.listFiles { f -> f.extension == "xml" }
-            ?.map { it.name } ?: emptyList()
+    fun availableVersions(): List<String> =
         // A name can only appear once, and open() resolves assets first, so an
         // import is kept off a bundled name at import time instead.
-        return (bundledVersions() + imported).distinct().sorted()
-    }
+        (bundledVersions() + importedVersions()).distinct().sorted()
 
     private fun open(versionFile: String): InputStream? =
         runCatching { context.assets.open("bibles/$versionFile") }.getOrNull()
-            ?: java.io.File(java.io.File(context.filesDir, "bibles"), versionFile)
+            ?: java.io.File(importedDir(), versionFile)
                 .takeIf { it.exists() }?.inputStream()
 
     /**
