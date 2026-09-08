@@ -43,14 +43,21 @@ object ReferenceParser {
     )
 
     /**
-     * Splits a selection into candidate fragments on ';', ',' and " and ",
-     * mirroring splitMultipleReferences(). Only used when the whole input
-     * fails to parse as one reference.
+     * Splits a selection into candidate fragments, mirroring
+     * splitMultipleReferences(). Only used when the whole input fails to parse
+     * as one reference.
+     *
+     * [includeComma] is false for the first pass: splitting on ',' unconditionally
+     * would tear "John 3:16,18 and Romans 8:28" into an orphaned "18" that
+     * matches no pattern and is silently dropped. Commas are only used as a
+     * separator for a fragment that failed to parse on its own.
      */
-    fun splitMultipleReferences(input: String): List<String> =
-        input.split(Regex(";|,|\\s+and\\s+", RegexOption.IGNORE_CASE))
+    fun splitMultipleReferences(input: String, includeComma: Boolean = true): List<String> {
+        val separators = if (includeComma) ";|,|\\s+and\\s+" else ";|\\s+and\\s+"
+        return input.split(Regex(separators, RegexOption.IGNORE_CASE))
             .map { it.trim() }
             .filter { it.isNotEmpty() }
+    }
 
     /** Tries the whole string as ONE reference. Returns null if no pattern matches. */
     fun parseSingleReference(refStr: String): BibleReference? {
@@ -144,13 +151,29 @@ object ReferenceParser {
      * legitimate comma-lists ("John 3:16,18,20") are not torn apart; only on
      * failure fall back to splitting into multiple references and keep every
      * fragment that parses (partial success counts).
+     *
+     * The fallback is two-stage: ';' and " and " first (which leaves comma
+     * lists intact), then ',' applied only to fragments that still fail.
      */
     fun parseReferences(raw: String): List<BibleReference> {
         if (raw.isBlank()) return emptyList()
         val trimmed = raw.trim()
         parseSingleReference(trimmed)?.let { return listOf(it) }
 
-        return splitMultipleReferences(raw)
-            .mapNotNull { parseSingleReference(it) }
+        val out = mutableListOf<BibleReference>()
+        for (fragment in splitMultipleReferences(trimmed, includeComma = false)) {
+            val whole = parseSingleReference(fragment)
+            if (whole != null) {
+                out.add(whole)
+                continue
+            }
+            // Only now is a comma a reference separator rather than part of a
+            // verse list, e.g. "John 3:16, Romans 8:28".
+            fragment.split(',')
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .mapNotNullTo(out) { parseSingleReference(it) }
+        }
+        return out
     }
 }

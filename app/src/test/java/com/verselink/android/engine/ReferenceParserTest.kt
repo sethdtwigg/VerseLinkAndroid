@@ -48,6 +48,24 @@ class ReferenceParserTest {
 
         override fun maxVerse(book: String, chapter: Int): Int? =
             data[book]?.get(chapter)?.keys?.maxOrNull()
+
+        override fun maxChapter(book: String): Int? =
+            data[book]?.keys?.maxOrNull()
+    }
+
+    /** Counts provider hits so range iteration bounds can be asserted. */
+    private class CountingProvider(private val inner: BibleTextProvider) : BibleTextProvider {
+        var verseLookups = 0
+            private set
+
+        override fun verseText(book: String, chapter: Int, verse: Int): String? {
+            verseLookups++
+            return inner.verseText(book, chapter, verse)
+        }
+
+        override fun maxVerse(book: String, chapter: Int): Int? = inner.maxVerse(book, chapter)
+
+        override fun maxChapter(book: String): Int? = inner.maxChapter(book)
     }
 
     private val engine = VerselinkBibleEngine(MapProvider())
@@ -245,5 +263,117 @@ class ReferenceParserTest {
     @Test fun `reference label canonicalises alias input`() {
         val result = engine.getVerseText(engine.tryParseReference("jn 3:16")!!)
         assertEquals("John 3:16", result!!.referenceLabel)
+    }
+
+    // ---------- Labels per reference type ----------
+    // Regression: CHAPTER_ONLY / CHAPTER_RANGE / BOOK_RANGE all default
+    // verseStart to 1 internally, which used to leak out as "Psalms 23:1".
+
+    @Test fun `chapter only label has no verse`() {
+        val result = engine.getVerseText(engine.tryParseReference("Psalm 23")!!)
+        assertEquals("Psalms 23", result!!.referenceLabel)
+    }
+
+    @Test fun `chapter only replacement starts with bare chapter label`() {
+        val out = engine.getReplacementText(engine.tryParseReferences("Psalm 23"))
+        assertTrue(out!!.startsWith("Psalms 23 The LORD is my shepherd"))
+    }
+
+    @Test fun `chapter range label has no verse`() {
+        val result = engine.getVerseText(engine.tryParseReference("Genesis 1-50")!!)
+        assertEquals("Genesis 1-50", result!!.referenceLabel)
+    }
+
+    @Test fun `book range without chapters labels both books`() {
+        val result = engine.getVerseText(engine.tryParseReference("Genesis - Exodus")!!)
+        assertEquals("Genesis - Exodus", result!!.referenceLabel)
+    }
+
+    @Test fun `book range with chapters keeps them`() {
+        val result = engine.getVerseText(engine.tryParseReference("Jonah 1 - Micah 1")!!)
+        assertEquals("Jonah 1 - Micah 1", result!!.referenceLabel)
+    }
+
+    @Test fun `multiple verses label lists every verse`() {
+        val result = engine.getVerseText(engine.tryParseReference("John 3:16,18,20")!!)
+        assertEquals("John 3:16,18,20", result!!.referenceLabel)
+    }
+
+    @Test fun `verse range label keeps both ends`() {
+        val result = engine.getVerseText(engine.tryParseReference("John 3:16-17")!!)
+        assertEquals("John 3:16-17", result!!.referenceLabel)
+    }
+
+    @Test fun `cross chapter label keeps both chapters`() {
+        val result = engine.getVerseText(engine.tryParseReference("Romans 8:28-9:1")!!)
+        assertEquals("Romans 8:28-9:1", result!!.referenceLabel)
+    }
+
+    @Test fun `dynamic reference does not invent a verse for a chapter`() {
+        val e = engineWith("dynamic" to true)
+        val result = e.getVerseText(e.tryParseReference("Psalm 23")!!)
+        assertEquals("Psalms 23", result!!.referenceLabel)
+    }
+
+    // ---------- Verse numbering ----------
+
+    @Test fun `option verse numbers apply to comma lists`() {
+        // Regression: MULTIPLE_VERSES bypassed the numbering helper entirely.
+        val e = engineWith("numbers" to true, "ref" to false)
+        val out = e.getReplacementText(e.tryParseReferences("John 3:16,18,20"))
+        assertTrue(out!!.startsWith("16 For God so loved"))
+        assertTrue(out.contains("18 He that believeth"))
+        assertTrue(out.contains("20 For every one"))
+    }
+
+    // ---------- Multi-reference splitting ----------
+
+    @Test fun `comma list survives an and separated selection`() {
+        // Regression: the fallback split on ',' first, orphaning "18".
+        val refs = engine.tryParseReferences("John 3:16,18 and Romans 8:28")
+        assertEquals(2, refs.size)
+        assertEquals(listOf(16, 18), refs[0].verseList)
+        assertEquals("Romans", refs[1].book)
+        val out = engine.getReplacementText(refs)
+        assertTrue(out!!.contains("begotten Son"))
+        assertTrue(out.contains("He that believeth"))
+        assertTrue(out.contains("work together for good"))
+    }
+
+    @Test fun `comma still separates two whole references`() {
+        val refs = engine.tryParseReferences("John 3:16, Romans 8:28")
+        assertEquals(2, refs.size)
+        assertEquals("John", refs[0].book)
+        assertEquals("Romans", refs[1].book)
+    }
+
+    // ---------- Range iteration is bounded by the data ----------
+
+    @Test fun `chapter lookup stops at the last verse that exists`() {
+        val counting = CountingProvider(MapProvider())
+        val e = VerselinkBibleEngine(counting)
+        e.getReplacementText(e.tryParseReferences("Psalm 119"))
+        // Exactly the 176 verses of the chapter, not the MAX_VERSE sentinel.
+        assertEquals(176, counting.verseLookups)
+    }
+
+    @Test fun `unknown chapter costs no verse lookups`() {
+        val counting = CountingProvider(MapProvider())
+        val e = VerselinkBibleEngine(counting)
+        assertNull(e.getReplacementText(e.tryParseReferences("Psalm 42")))
+        assertEquals(0, counting.verseLookups)
+    }
+
+    @Test fun `book range walks only chapters that exist`() {
+        val counting = CountingProvider(MapProvider())
+        val e = VerselinkBibleEngine(counting)
+        val out = e.getReplacementText(e.tryParseReferences("Genesis - Exodus"))
+        assertTrue(out!!.contains("In the beginning"))
+        assertTrue(out.contains("names of the children of Israel"))
+        // Bounded by the data: Genesis 1 (1 verse) + Genesis 50 (verses 1-26,
+        // only 26 exists) + Exodus 1 (1 verse). The empty chapters in between
+        // cost nothing, and the MAX_CHAPTER/MAX_VERSE sentinels - which would
+        // have meant ~2M probes for these two books - are never reached.
+        assertEquals(28, counting.verseLookups)
     }
 }

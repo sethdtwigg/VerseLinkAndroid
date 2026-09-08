@@ -10,6 +10,13 @@ interface BibleTextProvider {
 
     /** Highest verse number that exists in this chapter, or null if unknown chapter. */
     fun maxVerse(book: String, chapter: Int): Int?
+
+    /**
+     * Highest chapter number that exists in this book, or null if unknown.
+     * Defaulted so existing providers keep compiling; the engine falls back to
+     * its sentinel bound when a provider cannot answer.
+     */
+    fun maxChapter(book: String): Int? = null
 }
 
 /**

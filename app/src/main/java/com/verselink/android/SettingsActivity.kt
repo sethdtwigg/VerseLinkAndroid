@@ -15,15 +15,15 @@ import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 import com.verselink.android.engine.AssetBibleRepository
+import com.verselink.android.util.CrashLog
 import java.io.File
-import java.io.FileWriter
-import java.io.PrintWriter
 import kotlin.concurrent.thread
 
 /**
- * Minimal but functional settings screen - fully crash-proofed.
- * All initialization wrapped; any exception is logged to a persistent file
- * and shown as a Toast instead of crashing the process.
+ * Minimal but functional settings screen. Every binding step is guarded: a
+ * failure in one section is logged and shown as a Toast rather than taking the
+ * whole screen down, but genuine crashes still reach the platform handler (see
+ * [CrashLog]).
  */
 class SettingsActivity : Activity() {
 
@@ -31,15 +31,18 @@ class SettingsActivity : Activity() {
     private lateinit var spinner: Spinner
     private val TAG = "VerseLink"
 
+    /**
+     * Spinner fires onItemSelected(0) for the adapter's initial selection on
+     * the layout pass after setAdapter. Without this latch, that synthetic
+     * callback switches the user's translation to whatever sorts first.
+     */
+    private var spinnerReady = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Global safety net - catch ANY exception before super.onCreate completes
-        Thread.setDefaultUncaughtExceptionHandler { _, e ->
-            logCrash(e)
-        }
+        CrashLog.install(this)
 
         super.onCreate(savedInstanceState)
 
-        // Fail-safe: if ANYTHING goes wrong, we stay alive and show the error
         try {
             setContentView(R.layout.activity_settings)
             Log.d(TAG, "Settings layout inflated")
@@ -55,22 +58,9 @@ class SettingsActivity : Activity() {
 
             Log.d(TAG, "All bindings complete")
         } catch (e: Exception) {
-            logCrash(e)
+            CrashLog.log(this, e)
             Toast.makeText(this, "Settings error: ${e.message}", Toast.LENGTH_LONG).show()
         }
-    }
-
-    private fun logCrash(e: Throwable) {
-        Log.e(TAG, "Settings crash", e)
-        try {
-            val file = File(filesDir, "settings_crash.log")
-            FileWriter(file, true).use { fw ->
-                PrintWriter(fw).use { pw ->
-                    pw.println("=== ${java.util.Date()} ===")
-                    e.printStackTrace(pw)
-                }
-            }
-        } catch (_: Exception) { /* best effort */ }
     }
 
     private fun bindMasterSwitch() {
@@ -81,24 +71,33 @@ class SettingsActivity : Activity() {
                 VerselinkPrefs.setEnabled(this, checked)
             }
         } catch (e: Exception) {
-            logCrash(e)
+            CrashLog.log(this, e)
         }
     }
 
     private fun bindTranslationSpinner() {
         try {
             spinner = findViewById(R.id.spinner_translation)
+            spinnerReady = false
+
             val versions = repository.availableVersions()
-            val display = versions.ifEmpty { listOf(AssetBibleRepository.DEFAULT_VERSION) }
+            val current = VerselinkPrefs.translation(this)
+            // Keep the saved translation visible even if its file has gone
+            // missing, so rebinding cannot quietly adopt a different one.
+            val display = (versions + current).distinct().sorted()
+
             spinner.adapter = ArrayAdapter(
                 this, android.R.layout.simple_spinner_dropdown_item, display
             )
-            val current = VerselinkPrefs.translation(this)
             val idx = display.indexOf(current)
             if (idx >= 0) spinner.setSelection(idx)
 
             spinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
                 override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
+                    if (!spinnerReady) {
+                        spinnerReady = true // swallow the adapter's initial callback
+                        return
+                    }
                     val chosen = spinner.adapter.getItem(position)?.toString() ?: return
                     if (chosen != VerselinkPrefs.translation(this@SettingsActivity)) {
                         thread {
@@ -113,7 +112,7 @@ class SettingsActivity : Activity() {
                 override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
             }
         } catch (e: Exception) {
-            logCrash(e)
+            CrashLog.log(this, e)
         }
     }
 
@@ -127,7 +126,7 @@ class SettingsActivity : Activity() {
                 startActivityForResult(intent, REQUEST_IMPORT)
             }
         } catch (e: Exception) {
-            logCrash(e)
+            CrashLog.log(this, e)
         }
     }
 
@@ -139,25 +138,46 @@ class SettingsActivity : Activity() {
         }
     }
 
+    /**
+     * Copies the picked document into filesDir/bibles.
+     *
+     * The name comes from a content provider, i.e. from another app, so it is
+     * treated as untrusted input: reduced to a bare filename and whitelisted
+     * before it is ever used as a path component. The copy also lands in a
+     * ".part" file that is only renamed into place once it parses, so a bad
+     * import can never overwrite - or delete - a translation that works.
+     */
     private fun importTranslation(uri: Uri) {
         thread(name = "verselink-import") {
+            var staged: File? = null
             val ok = runCatching {
-                val name = queryDisplayName(uri) ?: "IMPORTED_${System.currentTimeMillis()}.xml"
-                val safeName = if (name.endsWith(".xml", true)) name else "$name.xml"
+                val safeName = sanitiseName(queryDisplayName(uri))
                 val destDir = File(filesDir, "bibles").apply { mkdirs() }
+                val temp = File(destDir, "$safeName.part")
+                staged = temp
                 contentResolver.openInputStream(uri)!!.use { input ->
-                    File(destDir, safeName).outputStream().use { output -> input.copyTo(output) }
+                    temp.outputStream().use { output -> input.copyTo(output) }
                 }
-                EngineProvider.invalidate()
-                val probe = AssetBibleRepository(this).apply { selectedVersion = safeName }
+
+                val probe = AssetBibleRepository(this).apply { selectedVersion = temp.name }
                 val valid = probe.verseText("Genesis", 1, 1) != null ||
                     probe.verseText("John", 3, 16) != null ||
                     probe.maxVerse("Psalms", 119) != null
-                if (!valid) {
-                    File(destDir, safeName).delete()
-                    false
-                } else true
-            }.getOrDefault(false)
+                if (!valid) return@runCatching false
+
+                val dest = File(destDir, safeName)
+                if (dest.exists()) dest.delete()
+                if (!temp.renameTo(dest)) return@runCatching false
+                staged = null
+                // The file on disk changed; drop any cached parse of that name.
+                EngineProvider.repository(this).invalidate()
+                EngineProvider.invalidate(this)
+                true
+            }.getOrElse { e ->
+                CrashLog.log(this, e)
+                false
+            }
+            staged?.delete()
 
             runOnUiThread {
                 Toast.makeText(
@@ -170,6 +190,19 @@ class SettingsActivity : Activity() {
         }
     }
 
+    /** Bare, whitelisted, .xml-suffixed filename - never a path. */
+    private fun sanitiseName(displayName: String?): String {
+        val base = displayName
+            ?.substringAfterLast('/')
+            ?.substringAfterLast('\\')
+            ?.filter { it.isLetterOrDigit() || it in ALLOWED_NAME_CHARS }
+            ?.trim()
+            ?.trimStart('.')
+            .orEmpty()
+        val name = base.ifEmpty { "IMPORTED_${System.currentTimeMillis()}" }
+        return if (name.endsWith(".xml", ignoreCase = true)) name else "$name.xml"
+    }
+
     private fun queryDisplayName(uri: Uri): String? =
         contentResolver.query(uri, null, null, null, null)?.use { cursor ->
             val idx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
@@ -178,23 +211,26 @@ class SettingsActivity : Activity() {
 
     private fun bindFormattingChecks() {
         try {
-            mapOf(
-                R.id.cb_include_reference to "includeReferenceInReplacement",
-                R.id.cb_reference_first_line to "referenceOnFirstLine",
-                R.id.cb_dynamic_reference to "dynamicReference",
-                R.id.cb_verse_numbers to "includeVerseNumbers",
-                R.id.cb_new_line_chapters to "newLineBetweenChapters",
-                R.id.cb_new_line_books to "newLineBetweenBooks"
-            ).forEach { (id, key) ->
-                val cb = findViewById<CheckBox>(id)
-                cb.isChecked = VerselinkPrefs.getFlag(this, key, key == "includeReferenceInReplacement")
+            VerselinkPrefs.FLAGS.forEach { flag ->
+                val cb = findViewById<CheckBox>(checkboxIdFor(flag.key) ?: return@forEach)
+                cb.isChecked = VerselinkPrefs.getFlag(this, flag.key, flag.default)
                 cb.setOnCheckedChangeListener { _, checked ->
-                    VerselinkPrefs.setFlag(this, key, checked)
+                    VerselinkPrefs.setFlag(this, flag.key, checked)
                 }
             }
         } catch (e: Exception) {
-            logCrash(e)
+            CrashLog.log(this, e)
         }
+    }
+
+    private fun checkboxIdFor(key: String): Int? = when (key) {
+        VerselinkPrefs.KEY_INCLUDE_REFERENCE -> R.id.cb_include_reference
+        VerselinkPrefs.KEY_REFERENCE_FIRST_LINE -> R.id.cb_reference_first_line
+        VerselinkPrefs.KEY_DYNAMIC_REFERENCE -> R.id.cb_dynamic_reference
+        VerselinkPrefs.KEY_VERSE_NUMBERS -> R.id.cb_verse_numbers
+        VerselinkPrefs.KEY_NEW_LINE_CHAPTERS -> R.id.cb_new_line_chapters
+        VerselinkPrefs.KEY_NEW_LINE_BOOKS -> R.id.cb_new_line_books
+        else -> null
     }
 
     private fun bindSwitchingStatus() {
@@ -207,11 +243,12 @@ class SettingsActivity : Activity() {
                 else R.string.switch_permission_missing
             )
         } catch (e: Exception) {
-            logCrash(e)
+            CrashLog.log(this, e)
         }
     }
 
     companion object {
         private const val REQUEST_IMPORT = 41
+        private const val ALLOWED_NAME_CHARS = "._- "
     }
 }

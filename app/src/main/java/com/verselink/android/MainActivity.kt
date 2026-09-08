@@ -9,15 +9,14 @@ import android.view.View
 import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
+import com.verselink.android.util.CrashLog
 import com.verselink.android.util.KeyboardSwitcher
-import java.io.File
-import java.io.FileWriter
-import java.io.PrintWriter
 
 /**
  * Launcher / onboarding screen: shows whether the optional VerseLink IME is
  * enabled, links to system keyboard settings, and explains the basic flow.
- * Fully crash-proofed.
+ * Startup work is guarded so a bad layout/resource shows an error instead of
+ * taking the screen down.
  */
 class MainActivity : Activity() {
 
@@ -26,9 +25,7 @@ class MainActivity : Activity() {
     private val TAG = "VerseLink"
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        Thread.setDefaultUncaughtExceptionHandler { _, e ->
-            logCrash(e)
-        }
+        CrashLog.install(this)
 
         super.onCreate(savedInstanceState)
         try {
@@ -46,21 +43,21 @@ class MainActivity : Activity() {
                 try {
                     startActivity(Intent(this, SettingsActivity::class.java))
                 } catch (e: Exception) {
-                    logCrash(e)
+                    CrashLog.log(this, e)
                     Toast.makeText(this, "Settings failed: ${e.message}", Toast.LENGTH_LONG).show()
                 }
             }
 
             refreshStatus()
         } catch (e: Exception) {
-            logCrash(e)
+            CrashLog.log(this, e)
             Toast.makeText(this, "App error: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 
     override fun onResume() {
         super.onResume()
-        try { refreshStatus() } catch (e: Exception) { logCrash(e) }
+        try { refreshStatus() } catch (e: Exception) { CrashLog.log(this, e) }
     }
 
     private fun refreshStatus() {
@@ -78,20 +75,7 @@ class MainActivity : Activity() {
             )
             btnEnableIme.visibility = View.VISIBLE
         } catch (e: Exception) {
-            logCrash(e)
+            CrashLog.log(this, e)
         }
-    }
-
-    private fun logCrash(e: Throwable) {
-        Log.e(TAG, "Main crash", e)
-        try {
-            val file = File(filesDir, "main_crash.log")
-            FileWriter(file, true).use { fw ->
-                PrintWriter(fw).use { pw ->
-                    pw.println("=== ${java.util.Date()} ===")
-                    e.printStackTrace(pw)
-                }
-            }
-        } catch (_: Exception) { /* best effort */ }
     }
 }

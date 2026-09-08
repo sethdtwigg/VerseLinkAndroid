@@ -6,7 +6,6 @@ import android.os.Looper
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.ExtractedTextRequest
-import android.view.inputmethod.InputConnection
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -15,7 +14,7 @@ import com.verselink.android.R
 import com.verselink.android.engine.ReferenceParser
 import com.verselink.android.handoff.PendingReplacementStore
 import com.verselink.android.util.KeyboardSwitcher
-import kotlin.concurrent.thread
+import java.util.concurrent.Executors
 
 /**
  * Minimal single-purpose IME. It is NOT a typing keyboard. Its job is to
@@ -28,7 +27,7 @@ import kotlin.concurrent.thread
  *     PendingReplacementStore and activated us. Show preview + Insert.
  *
  *  2. SELECTION SCAN (Windows-hotkey style): the field has selected text that
- *     parses as a reference -> one tap replaces the selection.
+ *     parses as one or more references -> one tap replaces the selection.
  *
  *  3. CURSOR SCAN: no selection. Read the text immediately BEFORE the cursor
  *     (getTextBeforeCursor) and look for a reference the user just typed -
@@ -55,6 +54,18 @@ class VerseLinkImeService : InputMethodService() {
     private var statusView: TextView? = null
     private var insertButton: Button? = null
     private val main = Handler(Looper.getMainLooper())
+    private val scanner = Executors.newSingleThreadExecutor { r ->
+        Thread(r, "verselink-ime-scan")
+    }
+
+    /**
+     * Bumped every time the focused field changes. A scan can take seconds
+     * (first-use XML parse), and its result is only meaningful for the field
+     * it was started for: applying a stale deleteBefore to a different field
+     * eats characters the user never typed.
+     */
+    @Volatile
+    private var sessionId = 0
 
     override fun onCreateInputView(): View {
         val root = LinearLayout(this).apply {
@@ -91,6 +102,7 @@ class VerseLinkImeService : InputMethodService() {
 
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
+        val session = ++sessionId
 
         // Path 1: explicit hand-off wins - never second-guess it.
         val handedOff = PendingReplacementStore.take(this)
@@ -101,17 +113,17 @@ class VerseLinkImeService : InputMethodService() {
 
         showScanning()
         // Field inspection + first-time XML parse can take seconds: off-thread.
-        thread(name = "verselink-ime-scan") {
+        scanner.execute {
             val found = findReferenceAtField()
             if (found == null) {
-                main.post { showIdle(getString(R.string.ime_no_reference)) }
-                return@thread
+                postForSession(session) { showIdle(getString(R.string.ime_no_reference)) }
+                return@execute
             }
             val (raw, deleteBefore) = found
             val engine = com.verselink.android.EngineProvider.get(applicationContext)
             val refs = engine.tryParseReferences(raw)
             val replacement = engine.getReplacementText(refs)
-            main.post {
+            postForSession(session) {
                 if (replacement == null) {
                     showIdle(getString(R.string.verse_not_found, raw))
                 } else {
@@ -128,6 +140,11 @@ class VerseLinkImeService : InputMethodService() {
         }
     }
 
+    /** Runs [block] on the main thread only if [session] is still the current one. */
+    private fun postForSession(session: Int, block: () -> Unit) {
+        main.post { if (session == sessionId) block() }
+    }
+
     /**
      * Inspects the focused field for a usable reference.
      * Returns (referenceText, charsToDeleteBeforeCursor); deleteBefore == 0
@@ -136,41 +153,48 @@ class VerseLinkImeService : InputMethodService() {
     private fun findReferenceAtField(): Pair<String, Int>? {
         val ic = currentInputConnection ?: return null
 
-        // 1) Selected text?
+        // 1) Selected text? Parse it the same way the PROCESS_TEXT path does,
+        //    so multi-reference selections ("John 3:16; Romans 8:28") work
+        //    here too.
         val selected = ic.getSelectedText(0)?.toString()?.trim()
-        if (!selected.isNullOrEmpty() && ReferenceParser.parseSingleReference(selected) != null) {
-            return selected to 0
+        if (!selected.isNullOrEmpty()) {
+            // A selection means the user has told us what to replace. If it
+            // does not parse we stop: falling through to the cursor scan would
+            // measure deleteBefore from the SELECTION START and then delete
+            // text outside the selection.
+            return if (ReferenceParser.parseReferences(selected).isNotEmpty()) selected to 0 else null
         }
 
         // 2) Text just typed before the cursor. Prefer getTextBeforeCursor
         //    (works in more editors than getExtractedText, incl. many webviews).
-        val before = ic.getTextBeforeCursor(CURSOR_WINDOW, 0)?.toString()
-            ?: ic.getExtractedText(ExtractedTextRequest(), 0)?.text
-                ?.let { full ->
-                    val end = ic.getExtractedText(ExtractedTextRequest(), 0)?.selectionEnd ?: return@let null
-                    if (end in 1..full.length) full.substring(0, end)
-                    else null
-                }
+        val before = ic.getTextBeforeCursor(CURSOR_WINDOW, 0)?.toString()?.takeIf { it.isNotEmpty() }
+            ?: extractedTextBeforeCursor(ic)
             ?: return null
 
         // Walk backwards from the cursor: the LONGEST suffix that parses as a
         // complete reference wins, so "Romans 8:28-9:1" beats "9:1".
         for (cut in 0..before.length - MIN_REF_LEN) {
-            val candidate = before.substring(cut).trim()
+            val suffix = before.substring(cut)
+            val candidate = suffix.trim()
             if (candidate.length < MIN_REF_LEN) break
             if (ReferenceParser.parseSingleReference(candidate) != null) {
-                // Delete everything from the candidate's real start (including
-                // stray spaces) up to the cursor; the replacement supplies its
-                // own canonical reference label.
-                val startInWindow = before.lastIndexOf(candidate.firstWord())
-                val deleteBefore = before.length - startInWindow
-                return candidate to deleteBefore
+                // Delete from the first non-space character of the candidate up
+                // to the cursor. Leading text (and the space separating it) is
+                // left alone; the replacement supplies its own reference label.
+                val leading = suffix.indexOfFirst { !it.isWhitespace() }
+                val start = cut + (if (leading < 0) 0 else leading)
+                return candidate to (before.length - start)
             }
         }
         return null
     }
 
-    private fun String.firstWord(): String = substring(0, indexOf(' ').coerceAtLeast(length))
+    private fun extractedTextBeforeCursor(ic: android.view.inputmethod.InputConnection): String? {
+        val extracted = ic.getExtractedText(ExtractedTextRequest(), 0) ?: return null
+        val full = extracted.text ?: return null
+        val end = extracted.selectionStart
+        return if (end in 1..full.length) full.substring(0, end).toString() else null
+    }
 
     // ---- UI state helpers ----
 
@@ -225,11 +249,6 @@ class VerseLinkImeService : InputMethodService() {
         restoreUserKeyboard()
     }
 
-    /** Public helper matching the requested API surface. */
-    fun replaceSelectionWith(text: String) {
-        currentInputConnection?.commitText(text, 1)
-    }
-
     /**
      * Return control to the user's normal keyboard.
      * Tier 1: write back the snapshotted default IME (needs WRITE_SECURE_SETTINGS).
@@ -258,9 +277,15 @@ class VerseLinkImeService : InputMethodService() {
 
     override fun onFinishInputView(finishingInput: Boolean) {
         super.onFinishInputView(finishingInput)
+        sessionId++ // any in-flight scan result is now stale
         action = null
         // Don't leave an unconsumed hand-off for some unrelated future field.
         PendingReplacementStore.clear(this)
+    }
+
+    override fun onDestroy() {
+        scanner.shutdownNow()
+        super.onDestroy()
     }
 
     companion object {
