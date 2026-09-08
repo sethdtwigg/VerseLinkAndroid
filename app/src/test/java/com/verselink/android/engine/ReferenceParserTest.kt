@@ -148,6 +148,37 @@ class ReferenceParserTest {
         assertEquals(listOf(3, 5, 7), ref!!.verseList)
     }
 
+    // ---------- Multi-word book names ----------
+    // Windows used a single-word book token, so these never parsed even
+    // though every one of these names is already in the alias table.
+
+    @Test fun `song of solomon parses`() {
+        val ref = engine.tryParseReference("Song of Solomon 2:1")
+        assertEquals("Song of Solomon", ref!!.book)
+        assertEquals(2, ref.chapter)
+        assertEquals(1, ref.verseStart)
+    }
+
+    @Test fun `song of songs alias parses`() {
+        assertEquals("Song of Solomon", engine.tryParseReference("song of songs 1:1")!!.book)
+    }
+
+    @Test fun `ordinal numbered book parses`() {
+        assertEquals("1 John", engine.tryParseReference("1st John 2:1")!!.book)
+        assertEquals("3 John", engine.tryParseReference("3rd John 1:2")!!.book)
+    }
+
+    @Test fun `multi word chapter only parses`() {
+        val ref = engine.tryParseReference("Song of Solomon 2")
+        assertEquals("Song of Solomon", ref!!.book)
+        assertEquals(ReferenceType.CHAPTER_ONLY, ref.type)
+    }
+
+    @Test fun `multi word non book still rejected`() {
+        assertNull(engine.tryParseReference("Living room 3:16"))
+        assertNull(engine.tryParseReference("Conference room 2"))
+    }
+
     @Test fun `book range without chapters`() {
         val ref = engine.tryParseReference("Genesis - Exodus")
         assertEquals(ReferenceType.BOOK_RANGE, ref!!.type)

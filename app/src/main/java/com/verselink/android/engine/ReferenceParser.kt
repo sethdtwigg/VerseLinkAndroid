@@ -7,17 +7,26 @@ package com.verselink.android.engine
  * must be tried before the comma-list pattern or "John 3:16" would match the
  * MULTIPLE_VERSES shape.
  *
- * Faithful-port notes (same limitations as Windows):
- *  - Book token is ([0-9]*\s*[a-zA-Z]+): multi-word unnumbered books such as
- *    "Song of Solomon 2:1" do not parse (upstream limitation, documented).
+ * Faithful-port notes:
  *  - Range separators are hyphen and Unicode en/em dashes.
+ *  - The book token accepts several words, unlike the upstream single-word
+ *    token: see [BOOK].
  */
 object ReferenceParser {
 
     // Character class for range separators: '-', en dash (–), em dash (—).
     private const val DASH = "\\u002D\\u2013\\u2014"
 
-    private val BOOK = "([0-9]*\\s*[a-zA-Z]+)"
+    /**
+     * Optional leading number, then one or more words.
+     *
+     * Windows used a single-word token, which meant "Song of Solomon 2:1" and
+     * "1st John 2:1" never parsed even though both names are in the alias
+     * table. Allowing extra words costs nothing in false positives, because
+     * the captured token still has to match an alias exactly - "Meeting room
+     * 5" is a book name lookup that fails, not a reference.
+     */
+    private val BOOK = "([0-9]*\\s*[a-zA-Z]+(?:\\s+[a-zA-Z]+)*)"
 
     private data class Pattern(val regex: Regex)
 
