@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The VerseLink keyboard is a status line plus two buttons, not a typing
+  keyboard. Colours come from theme attributes so the bar follows the device's
+  light/dark setting - it used to hard-code a light grey background and inherit
+  the default text colour, which could render light-on-light in dark mode.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?android:attr/colorBackground"
+    android:orientation="vertical"
+    android:paddingLeft="16dp"
+    android:paddingTop="12dp"
+    android:paddingRight="16dp"
+    android:paddingBottom="12dp">
+
+    <TextView
+        android:id="@+id/ime_status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="?android:attr/textColorPrimary"
+        android:textSize="14sp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:gravity="end"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/ime_insert"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:visibility="gone" />
+
+        <Button
+            android:id="@+id/ime_cancel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/cancel" />
+    </LinearLayout>
+</LinearLayout>

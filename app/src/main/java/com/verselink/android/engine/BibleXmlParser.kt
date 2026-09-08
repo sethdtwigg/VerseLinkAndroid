@@ -29,7 +29,15 @@ object BibleXmlParser {
                 when (parser.name) {
                     "b" -> {
                         bookName = parser.getAttributeValue(null, "n")
-                        if (bookName != null) books[bookName] = TreeMap()
+                        // Merge rather than replace: some third-party files
+                        // split one book across several <b> elements, and
+                        // assigning a fresh map there discarded the chapters
+                        // already collected for it.
+                        if (bookName != null) books.getOrPut(bookName) { TreeMap() }
+                        // A new book always restarts chapter numbering; without
+                        // this a <v> appearing before the book's first <c> was
+                        // filed under the previous book's chapter number.
+                        chapter = -1
                     }
                     "c" -> chapter = parser.getAttributeValue(null, "n")?.toIntOrNull() ?: -1
                     "v" -> {

@@ -25,13 +25,15 @@ sharing the same parser behaviour and the same Bible XML data files.
 
 ## Building
 
-1. Open the project root in Android Studio (or run
-   `gradle :app:assembleDebug`).
+1. Open the project root in Android Studio, or from a shell run
+   `./gradlew :app:assembleDebug` (`gradlew.bat` on Windows). A JDK 17+ must be
+   on `JAVA_HOME`; nothing machine-specific is pinned in `gradle.properties`.
 2. Install the debug APK on a device/emulator running Android 8.0+ (API 26).
+3. Unit tests: `./gradlew :app:testDebugUnitTest`.
 
 ### Release build (ready-to-install APK)
 
-Run `gradle :app:assembleRelease` (or Android Studio → Build → Generate Signed
+Run `./gradlew :app:assembleRelease` (or Android Studio → Build → Generate Signed
 App Bundles/APKs). Output:
 
 ```
@@ -45,7 +47,7 @@ machine, Gradle falls back to the debug key so a build always succeeds.
 
 ### Installing on a phone (no adb, no developer options)
 
-1. Copy `dist/VerseLink-1.0.0.apk` to the phone (USB, Drive, email...).
+1. Copy `dist/VerseLink-1.0.4.apk` to the phone (USB, Drive, email...).
 2. Tap it; accept the "install unknown apps" prompt when asked.
 3. Done. The selection-menu action works immediately with zero setup.
    Optional extras afterwards:
@@ -96,8 +98,9 @@ picker instead and you tap manually.
 
 ## Manual test checklist
 
-Parser coverage is unit-tested (`app/src/test/.../ReferenceParserTest.kt`,
-27 cases). On-device checks:
+Parser, lookup and formatting coverage is unit-tested (45 cases across
+`ReferenceParserTest.kt` and `BibleXmlParserIntegrationTest.kt`, the latter
+parsing the real bundled KJV). On-device checks:
 
 | # | Scenario | Steps | Expected |
 |---|----------|-------|----------|
@@ -112,7 +115,10 @@ Parser coverage is unit-tested (`app/src/test/.../ReferenceParserTest.kt`,
 | 9 | Webview field | Select ref in Chrome address/textarea | Menu may appear; verify replacement applied |
 | 10 | Keyboard flow | Share ref → pick VerseLink keyboard → Insert | Verse inserted at cursor, Gboard restored |
 | 11 | Formatting toggles | Toggle verse numbers / first-line reference in Settings | Output matches flags |
-| 12 | Translation switch | Settings → choose/import another XML → resolve ref | Verses come from chosen translation |
+| 12 | Translation switch | Settings → choose/import another XML → resolve ref | Verses come from chosen translation, no restart needed |
+| 13 | Chapter/book labels | Select `Psalm 23`, `John 1-2`, `Genesis - Exodus` | Label has no invented `:1` |
+| 14 | Read-only source | Select a ref in a non-editable view → VerseLink | Verse copied to clipboard |
+| 15 | Bad import | Import a non-Bible XML | "Import failed"; previous translation still works |
 
 ## Limitations & platform notes
 

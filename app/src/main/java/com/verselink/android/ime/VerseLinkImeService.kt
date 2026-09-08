@@ -7,7 +7,6 @@ import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.ExtractedTextRequest
 import android.widget.Button
-import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import com.verselink.android.R
@@ -68,35 +67,14 @@ class VerseLinkImeService : InputMethodService() {
     private var sessionId = 0
 
     override fun onCreateInputView(): View {
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(32, 24, 32, 24)
-            setBackgroundColor(0xFFF5F5F5.toInt())
-        }
-        val status = TextView(this).apply { textSize = 14f }
-        val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = android.view.Gravity.END
-        }
-        val spacer = View(this).apply {
-            layoutParams = LinearLayout.LayoutParams(0, 0, 1f)
-        }
-        val insert = Button(this).apply {
-            visibility = View.GONE
+        // Inflated rather than built in code so the bar picks up the device's
+        // light/dark theme (see res/layout/ime_bar.xml).
+        val root = layoutInflater.inflate(R.layout.ime_bar, null)
+        statusView = root.findViewById(R.id.ime_status)
+        insertButton = root.findViewById<Button>(R.id.ime_insert).apply {
             setOnClickListener { performCurrentAction() }
         }
-        val cancel = Button(this).apply {
-            text = context.getString(R.string.cancel)
-            setOnClickListener { restoreUserKeyboard() }
-        }
-        row.addView(spacer)
-        row.addView(insert)
-        row.addView(cancel)
-        root.addView(status)
-        root.addView(row)
-
-        statusView = status
-        insertButton = insert
+        root.findViewById<Button>(R.id.ime_cancel).setOnClickListener { restoreUserKeyboard() }
         return root
     }
 

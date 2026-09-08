@@ -51,15 +51,19 @@ class AssetBibleRepository(private val context: Context) : BibleTextProvider {
         synchronized(this) { cache = null }
     }
 
+    /** Translations shipped inside the APK. */
+    fun bundledVersions(): List<String> = runCatching {
+        context.assets.list("bibles")?.toList() ?: emptyList()
+    }.getOrDefault(emptyList())
+
     /** Lists bundled assets plus user-imported translations (filesDir/bibles). */
     fun availableVersions(): List<String> {
-        val fromAssets = runCatching {
-            context.assets.list("bibles")?.toList() ?: emptyList()
-        }.getOrDefault(emptyList())
         val importedDir = java.io.File(context.filesDir, "bibles")
         val imported = importedDir.listFiles { f -> f.extension == "xml" }
             ?.map { it.name } ?: emptyList()
-        return (fromAssets + imported).distinct().sorted()
+        // A name can only appear once, and open() resolves assets first, so an
+        // import is kept off a bundled name at import time instead.
+        return (bundledVersions() + imported).distinct().sorted()
     }
 
     private fun open(versionFile: String): InputStream? =

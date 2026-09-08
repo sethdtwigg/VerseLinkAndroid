@@ -1,6 +1,8 @@
 package com.verselink.android
 
 import android.app.Activity
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
@@ -12,8 +14,11 @@ import kotlin.concurrent.thread
  *
  * The platform replaces the selected text automatically when this activity
  * returns RESULT_OK with Intent.EXTRA_PROCESS_TEXT - no IME involvement at
- * all. This is the reliable path; the classifier+IME hybrid is the premium
- * path for devices where the system classifier can be replaced.
+ * all. This is the reliable path; the IME is the fallback for editors that
+ * ignore the returned text.
+ *
+ * Read-only sources (EXTRA_PROCESS_TEXT_READONLY) cannot be written back to,
+ * so there the verse goes to the clipboard instead of being silently dropped.
  */
 class ProcessTextActivity : Activity() {
 
@@ -21,6 +26,7 @@ class ProcessTextActivity : Activity() {
         super.onCreate(savedInstanceState)
 
         val selected: String? = intent?.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString()
+        val readOnly = intent?.getBooleanExtra(Intent.EXTRA_PROCESS_TEXT_READONLY, false) ?: false
 
         if (intent?.action != Intent.ACTION_PROCESS_TEXT ||
             !VerselinkPrefs.isEnabled(this) || selected.isNullOrBlank()
@@ -36,18 +42,29 @@ class ProcessTextActivity : Activity() {
             val replacement = engine.getReplacementText(refs)
 
             runOnUiThread {
-                if (replacement == null) {
-                    Toast.makeText(
-                        this,
-                        getString(R.string.verse_not_found, selected),
-                        Toast.LENGTH_SHORT
-                    ).show()
-                    finishWithText(selected) // unchanged
-                } else {
-                    finishWithText(replacement)
+                when {
+                    replacement == null -> {
+                        Toast.makeText(
+                            this,
+                            getString(R.string.verse_not_found, selected),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        finishWithText(selected) // unchanged
+                    }
+                    readOnly -> {
+                        copyToClipboard(replacement)
+                        Toast.makeText(this, R.string.copied_to_clipboard, Toast.LENGTH_SHORT).show()
+                        finish()
+                    }
+                    else -> finishWithText(replacement)
                 }
             }
         }
+    }
+
+    private fun copyToClipboard(text: String) {
+        val clipboard = getSystemService(CLIPBOARD_SERVICE) as? ClipboardManager ?: return
+        clipboard.setPrimaryClip(ClipData.newPlainText(getString(R.string.app_name), text))
     }
 
     /** RESULT_OK + EXTRA_PROCESS_TEXT makes TextView/EditText swap the selection. */

@@ -4,14 +4,13 @@
     <string name="ime_label">VerseLink</string>
     <string name="action_verselink">VerseLink</string>
     <string name="settings_title">VerseLink Settings</string>
-    <string name="insert_verse">Insert verse</string>
     <string name="cancel">Cancel</string>
     <string name="resolving_reference">Resolving reference…</string>
     <string name="verse_not_found">No verse found for: %1$s</string>
+    <string name="copied_to_clipboard">Verse copied to clipboard</string>
     <string name="pick_verselink_keyboard">Tap "VerseLink" in the keyboard list</string>
     <string name="inserted_and_switching_back">Inserted - switching back to your keyboard…</string>
     <string name="switch_back_manually">Done. Tap the keyboard icon to switch back.</string>
-    <string name="ime_hint_no_pending">Open a Bible reference menu to use VerseLink</string>
 
     <!-- Main screen -->
     <string name="enable_keyboard">Enable VerseLink keyboard</string>
@@ -20,7 +19,6 @@
     <string name="keyboard_note">Tip: you can also share selected text to VerseLink, which loads it into the VerseLink keyboard for insertion at the cursor.</string>
     <string name="ime_enabled_status">Keyboard: enabled</string>
     <string name="ime_disabled_status">Keyboard: not enabled yet (optional - the menu action works without it)</string>
-    <string name="open_keyboard_settings">Choose your keyboard</string>
 
     <!-- Settings screen -->
     <string name="pref_enabled">Enable VerseLink features</string>
