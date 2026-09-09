@@ -14,6 +14,29 @@ object VerselinkPrefs {
     /** Public so SettingsActivity can bind checkboxes generically by key name. */
     const val SETTINGS_PREFS_NAME = "verselink_settings"
 
+    const val KEY_INCLUDE_REFERENCE = "includeReferenceInReplacement"
+    const val KEY_REFERENCE_FIRST_LINE = "referenceOnFirstLine"
+    const val KEY_DYNAMIC_REFERENCE = "dynamicReference"
+    const val KEY_VERSE_NUMBERS = "includeVerseNumbers"
+    const val KEY_NEW_LINE_CHAPTERS = "newLineBetweenChapters"
+    const val KEY_NEW_LINE_BOOKS = "newLineBetweenBooks"
+
+    data class Flag(val key: String, val default: Boolean)
+
+    /**
+     * Single source of truth for the formatting flags and their defaults. The
+     * settings screen used to re-derive the defaults itself, which meant two
+     * places to keep in sync.
+     */
+    val FLAGS: List<Flag> = listOf(
+        Flag(KEY_INCLUDE_REFERENCE, true),
+        Flag(KEY_REFERENCE_FIRST_LINE, false),
+        Flag(KEY_DYNAMIC_REFERENCE, false),
+        Flag(KEY_VERSE_NUMBERS, false),
+        Flag(KEY_NEW_LINE_CHAPTERS, false),
+        Flag(KEY_NEW_LINE_BOOKS, false)
+    )
+
     private fun prefs(context: Context) =
         context.applicationContext.getSharedPreferences(SETTINGS_PREFS_NAME, Context.MODE_PRIVATE)
 
@@ -21,7 +44,7 @@ object VerselinkPrefs {
     fun getFlag(context: Context, key: String, def: Boolean) = prefs(context).getBoolean(key, def)
     fun setFlag(context: Context, key: String, value: Boolean) {
         prefs(context).edit().putBoolean(key, value).apply()
-        EngineProvider.invalidate()
+        EngineProvider.invalidate(context)
     }
 
     /** Master switch for all VerseLink UI entry points. */
@@ -33,27 +56,24 @@ object VerselinkPrefs {
     fun translation(context: Context) = prefs(context).getString("translation", AssetBibleRepository.DEFAULT_VERSION)!!
     fun setTranslation(context: Context, value: String) {
         prefs(context).edit().putString("translation", value).apply()
-        EngineProvider.invalidate() // force reload with the new file
+        EngineProvider.invalidate(context) // force reload with the new file
     }
 
+    private fun flag(context: Context, key: String): Boolean =
+        prefs(context).getBoolean(key, FLAGS.first { it.key == key }.default)
+
     // Formatting flags (same names/defaults as config.json on Windows).
-    fun includeReferenceInReplacement(context: Context) =
-        prefs(context).getBoolean("includeReferenceInReplacement", true)
+    fun includeReferenceInReplacement(context: Context) = flag(context, KEY_INCLUDE_REFERENCE)
 
-    fun referenceOnFirstLine(context: Context) =
-        prefs(context).getBoolean("referenceOnFirstLine", false)
+    fun referenceOnFirstLine(context: Context) = flag(context, KEY_REFERENCE_FIRST_LINE)
 
-    fun dynamicReference(context: Context) =
-        prefs(context).getBoolean("dynamicReference", false)
+    fun dynamicReference(context: Context) = flag(context, KEY_DYNAMIC_REFERENCE)
 
-    fun includeVerseNumbers(context: Context) =
-        prefs(context).getBoolean("includeVerseNumbers", false)
+    fun includeVerseNumbers(context: Context) = flag(context, KEY_VERSE_NUMBERS)
 
-    fun newLineBetweenChapters(context: Context) =
-        prefs(context).getBoolean("newLineBetweenChapters", false)
+    fun newLineBetweenChapters(context: Context) = flag(context, KEY_NEW_LINE_CHAPTERS)
 
-    fun newLineBetweenBooks(context: Context) =
-        prefs(context).getBoolean("newLineBetweenBooks", false)
+    fun newLineBetweenBooks(context: Context) = flag(context, KEY_NEW_LINE_BOOKS)
 
     fun formatterOptions(context: Context): FormatterOptions = FormatterOptions(
         includeReferenceInReplacement = includeReferenceInReplacement(context),
@@ -110,8 +130,18 @@ object EngineProvider {
         }
     }
 
-    /** Called when formatting settings change so new flags take effect immediately. */
-    fun invalidate() {
-        synchronized(this) { engine = null }
+    /**
+     * Called when settings change so they take effect immediately.
+     *
+     * Dropping the engine alone is not enough: the repository is cached
+     * separately and snapshots the chosen translation at construction time, so
+     * without pushing the current preference into it a translation change was
+     * invisible until the process died.
+     */
+    fun invalidate(context: Context) {
+        synchronized(this) {
+            repository?.selectedVersion = VerselinkPrefs.translation(context)
+            engine = null
+        }
     }
 }

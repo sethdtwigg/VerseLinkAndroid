@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="code_block_background">#2B2B2B</color>
+    <color name="ime_background">#202124</color>
+    <color name="ime_text">#E8EAED</color>
+</resources>

@@ -2,4 +2,18 @@
 <resources>
     <color name="verselink_primary">#3F51B5</color>
     <color name="verselink_on_primary">#FFFFFF</color>
+
+    <!-- Monospace block behind the adb instruction. Overridden in
+         values-night: a hard-coded light grey rendered the default (white)
+         text unreadable on a dark-themed device. -->
+    <color name="code_block_background">#F0F0F0</color>
+
+    <!-- IME bar palette. These are real colours rather than theme attributes
+         on purpose: InputMethodService forces android:style/Theme.InputMethod
+         on itself, which is a light theme, so ?android:attr/colorBackground
+         and friends resolve light even on a dark-themed device. Resource
+         qualifiers (values-night) follow the configuration instead, which the
+         process does receive. -->
+    <color name="ime_background">#F5F5F5</color>
+    <color name="ime_text">#1F1F1F</color>
 </resources>

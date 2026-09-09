@@ -67,6 +67,7 @@
             android:exported="true"
             android:excludeFromRecents="true"
             android:noHistory="true"
+            android:theme="@style/Theme.VerseLink.Translucent"
             android:label="@string/action_verselink">
             <intent-filter>
                 <action android:name="android.intent.action.PROCESS_TEXT" />

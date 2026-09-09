@@ -36,6 +36,12 @@
             android:layout_height="wrap_content"
             android:text="@string/import_translation" />
 
+        <Button
+            android:id="@+id/btn_delete_translation"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/delete_translation" />
+
         <!-- Formatting options - mirror the Windows config.json flags -->
         <TextView
             android:layout_width="match_parent"
@@ -81,6 +87,25 @@
             android:layout_height="wrap_content"
             android:text="@string/pref_new_line_books" />
 
+        <!-- Live sample so the six flags above explain themselves -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/preview_header"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/txt_preview"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp"
+            android:textColor="?android:attr/textColorSecondary"
+            android:textSize="13sp" />
+
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -100,9 +125,10 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:background="#F0F0F0"
+            android:background="@color/code_block_background"
             android:padding="12dp"
             android:text="@string/adb_instruction"
+            android:textColor="?android:attr/textColorPrimary"
             android:textIsSelectable="true"
             android:typeface="monospace"
             android:textSize="12sp" />

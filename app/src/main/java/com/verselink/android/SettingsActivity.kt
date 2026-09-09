@@ -15,15 +15,17 @@ import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 import com.verselink.android.engine.AssetBibleRepository
+import com.verselink.android.engine.VerselinkBibleEngine
+import com.verselink.android.util.CrashLog
+import com.verselink.android.util.TranslationFileName
 import java.io.File
-import java.io.FileWriter
-import java.io.PrintWriter
 import kotlin.concurrent.thread
 
 /**
- * Minimal but functional settings screen - fully crash-proofed.
- * All initialization wrapped; any exception is logged to a persistent file
- * and shown as a Toast instead of crashing the process.
+ * Minimal but functional settings screen. Every binding step is guarded: a
+ * failure in one section is logged and shown as a Toast rather than taking the
+ * whole screen down, but genuine crashes still reach the platform handler (see
+ * [CrashLog]).
  */
 class SettingsActivity : Activity() {
 
@@ -31,15 +33,21 @@ class SettingsActivity : Activity() {
     private lateinit var spinner: Spinner
     private val TAG = "VerseLink"
 
+    /**
+     * Spinner fires onItemSelected(0) for the adapter's initial selection on
+     * the layout pass after setAdapter. Without this latch, that synthetic
+     * callback switches the user's translation to whatever sorts first.
+     */
+    private var spinnerReady = false
+
+    /** Guards against out-of-order preview results when toggles fly. */
+    private var previewToken = 0
+
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Global safety net - catch ANY exception before super.onCreate completes
-        Thread.setDefaultUncaughtExceptionHandler { _, e ->
-            logCrash(e)
-        }
+        CrashLog.install(this)
 
         super.onCreate(savedInstanceState)
 
-        // Fail-safe: if ANYTHING goes wrong, we stay alive and show the error
         try {
             setContentView(R.layout.activity_settings)
             Log.d(TAG, "Settings layout inflated")
@@ -50,27 +58,16 @@ class SettingsActivity : Activity() {
             bindMasterSwitch()
             bindTranslationSpinner()
             bindImportButton()
+            bindDeleteButton()
             bindFormattingChecks()
             bindSwitchingStatus()
+            refreshPreview()
 
             Log.d(TAG, "All bindings complete")
         } catch (e: Exception) {
-            logCrash(e)
+            CrashLog.log(this, e)
             Toast.makeText(this, "Settings error: ${e.message}", Toast.LENGTH_LONG).show()
         }
-    }
-
-    private fun logCrash(e: Throwable) {
-        Log.e(TAG, "Settings crash", e)
-        try {
-            val file = File(filesDir, "settings_crash.log")
-            FileWriter(file, true).use { fw ->
-                PrintWriter(fw).use { pw ->
-                    pw.println("=== ${java.util.Date()} ===")
-                    e.printStackTrace(pw)
-                }
-            }
-        } catch (_: Exception) { /* best effort */ }
     }
 
     private fun bindMasterSwitch() {
@@ -81,24 +78,33 @@ class SettingsActivity : Activity() {
                 VerselinkPrefs.setEnabled(this, checked)
             }
         } catch (e: Exception) {
-            logCrash(e)
+            CrashLog.log(this, e)
         }
     }
 
     private fun bindTranslationSpinner() {
         try {
             spinner = findViewById(R.id.spinner_translation)
+            spinnerReady = false
+
             val versions = repository.availableVersions()
-            val display = versions.ifEmpty { listOf(AssetBibleRepository.DEFAULT_VERSION) }
+            val current = VerselinkPrefs.translation(this)
+            // Keep the saved translation visible even if its file has gone
+            // missing, so rebinding cannot quietly adopt a different one.
+            val display = (versions + current).distinct().sorted()
+
             spinner.adapter = ArrayAdapter(
                 this, android.R.layout.simple_spinner_dropdown_item, display
             )
-            val current = VerselinkPrefs.translation(this)
             val idx = display.indexOf(current)
             if (idx >= 0) spinner.setSelection(idx)
 
             spinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
                 override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
+                    if (!spinnerReady) {
+                        spinnerReady = true // swallow the adapter's initial callback
+                        return
+                    }
                     val chosen = spinner.adapter.getItem(position)?.toString() ?: return
                     if (chosen != VerselinkPrefs.translation(this@SettingsActivity)) {
                         thread {
@@ -106,6 +112,7 @@ class SettingsActivity : Activity() {
                             runOnUiThread {
                                 Toast.makeText(this@SettingsActivity,
                                     getString(R.string.translation_loaded, chosen), Toast.LENGTH_SHORT).show()
+                                refreshPreview()
                             }
                         }
                     }
@@ -113,7 +120,7 @@ class SettingsActivity : Activity() {
                 override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
             }
         } catch (e: Exception) {
-            logCrash(e)
+            CrashLog.log(this, e)
         }
     }
 
@@ -127,7 +134,75 @@ class SettingsActivity : Activity() {
                 startActivityForResult(intent, REQUEST_IMPORT)
             }
         } catch (e: Exception) {
-            logCrash(e)
+            CrashLog.log(this, e)
+        }
+    }
+
+    /**
+     * Imported translations are otherwise permanent - short of clearing app
+     * data there was no way to remove one. Bundled assets are not offered.
+     */
+    private fun bindDeleteButton() {
+        try {
+            findViewById<Button>(R.id.btn_delete_translation).setOnClickListener {
+                val imported = repository.importedVersions()
+                if (imported.isEmpty()) {
+                    Toast.makeText(this, R.string.no_imported_translations, Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+                // Explicit device-default dialog theme: this Activity carries an
+                // AppCompat theme but is not an AppCompatActivity, so a framework
+                // dialog left to inherit it can come out mis-styled in dark mode.
+                android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    .setTitle(R.string.delete_translation_title)
+                    .setItems(imported.toTypedArray()) { _, which ->
+                        deleteTranslation(imported[which])
+                    }
+                    .setNegativeButton(R.string.cancel, null)
+                    .show()
+            }
+        } catch (e: Exception) {
+            CrashLog.log(this, e)
+        }
+    }
+
+    private fun deleteTranslation(name: String) {
+        val deleted = repository.deleteImported(name)
+        if (deleted && VerselinkPrefs.translation(this) == name) {
+            // The active translation just went away; fall back to the bundled
+            // default rather than leaving a dangling selection.
+            VerselinkPrefs.setTranslation(this, AssetBibleRepository.DEFAULT_VERSION)
+        }
+        Toast.makeText(
+            this,
+            getString(if (deleted) R.string.translation_deleted else R.string.delete_failed, name),
+            Toast.LENGTH_SHORT
+        ).show()
+        if (deleted) {
+            bindTranslationSpinner()
+            refreshPreview()
+        }
+    }
+
+    /**
+     * Renders a sample reference with the flags as they stand, so the six
+     * checkboxes are self-explanatory. Resolution can touch the bible file, so
+     * it runs off the main thread; [previewToken] drops out-of-order results
+     * when several toggles are flipped quickly.
+     */
+    private fun refreshPreview() {
+        val token = ++previewToken
+        val options = VerselinkPrefs.formatterOptions(this)
+        thread(name = "verselink-preview") {
+            val engine = VerselinkBibleEngine(repository, options)
+            val text = runCatching {
+                engine.getReplacementText(engine.tryParseReferences(PREVIEW_REFERENCE))
+            }.getOrNull()
+            runOnUiThread {
+                if (token != previewToken) return@runOnUiThread
+                findViewById<TextView>(R.id.txt_preview)?.text =
+                    text ?: getString(R.string.preview_unavailable)
+            }
         }
     }
 
@@ -139,25 +214,49 @@ class SettingsActivity : Activity() {
         }
     }
 
+    /**
+     * Copies the picked document into filesDir/bibles.
+     *
+     * The name comes from a content provider, i.e. from another app, so it is
+     * treated as untrusted input: reduced to a bare filename and whitelisted
+     * before it is ever used as a path component. The copy also lands in a
+     * ".part" file that is only renamed into place once it parses, so a bad
+     * import can never overwrite - or delete - a translation that works.
+     */
     private fun importTranslation(uri: Uri) {
         thread(name = "verselink-import") {
+            var staged: File? = null
             val ok = runCatching {
-                val name = queryDisplayName(uri) ?: "IMPORTED_${System.currentTimeMillis()}.xml"
-                val safeName = if (name.endsWith(".xml", true)) name else "$name.xml"
+                val safeName = TranslationFileName.disambiguate(
+                    TranslationFileName.sanitise(queryDisplayName(uri)),
+                    repository.bundledVersions()
+                )
                 val destDir = File(filesDir, "bibles").apply { mkdirs() }
+                val temp = File(destDir, "$safeName.part")
+                staged = temp
                 contentResolver.openInputStream(uri)!!.use { input ->
-                    File(destDir, safeName).outputStream().use { output -> input.copyTo(output) }
+                    temp.outputStream().use { output -> input.copyTo(output) }
                 }
-                EngineProvider.invalidate()
-                val probe = AssetBibleRepository(this).apply { selectedVersion = safeName }
+
+                val probe = AssetBibleRepository(this).apply { selectedVersion = temp.name }
                 val valid = probe.verseText("Genesis", 1, 1) != null ||
                     probe.verseText("John", 3, 16) != null ||
                     probe.maxVerse("Psalms", 119) != null
-                if (!valid) {
-                    File(destDir, safeName).delete()
-                    false
-                } else true
-            }.getOrDefault(false)
+                if (!valid) return@runCatching false
+
+                val dest = File(destDir, safeName)
+                if (dest.exists()) dest.delete()
+                if (!temp.renameTo(dest)) return@runCatching false
+                staged = null
+                // The file on disk changed; drop any cached parse of that name.
+                EngineProvider.repository(this).invalidate()
+                EngineProvider.invalidate(this)
+                true
+            }.getOrElse { e ->
+                CrashLog.log(this, e)
+                false
+            }
+            staged?.delete()
 
             runOnUiThread {
                 Toast.makeText(
@@ -165,7 +264,10 @@ class SettingsActivity : Activity() {
                     if (ok) R.string.import_ok else R.string.import_failed,
                     Toast.LENGTH_LONG
                 ).show()
-                if (ok) bindTranslationSpinner()
+                if (ok) {
+                    bindTranslationSpinner()
+                    refreshPreview()
+                }
             }
         }
     }
@@ -178,23 +280,27 @@ class SettingsActivity : Activity() {
 
     private fun bindFormattingChecks() {
         try {
-            mapOf(
-                R.id.cb_include_reference to "includeReferenceInReplacement",
-                R.id.cb_reference_first_line to "referenceOnFirstLine",
-                R.id.cb_dynamic_reference to "dynamicReference",
-                R.id.cb_verse_numbers to "includeVerseNumbers",
-                R.id.cb_new_line_chapters to "newLineBetweenChapters",
-                R.id.cb_new_line_books to "newLineBetweenBooks"
-            ).forEach { (id, key) ->
-                val cb = findViewById<CheckBox>(id)
-                cb.isChecked = VerselinkPrefs.getFlag(this, key, key == "includeReferenceInReplacement")
+            VerselinkPrefs.FLAGS.forEach { flag ->
+                val cb = findViewById<CheckBox>(checkboxIdFor(flag.key) ?: return@forEach)
+                cb.isChecked = VerselinkPrefs.getFlag(this, flag.key, flag.default)
                 cb.setOnCheckedChangeListener { _, checked ->
-                    VerselinkPrefs.setFlag(this, key, checked)
+                    VerselinkPrefs.setFlag(this, flag.key, checked)
+                    refreshPreview()
                 }
             }
         } catch (e: Exception) {
-            logCrash(e)
+            CrashLog.log(this, e)
         }
+    }
+
+    private fun checkboxIdFor(key: String): Int? = when (key) {
+        VerselinkPrefs.KEY_INCLUDE_REFERENCE -> R.id.cb_include_reference
+        VerselinkPrefs.KEY_REFERENCE_FIRST_LINE -> R.id.cb_reference_first_line
+        VerselinkPrefs.KEY_DYNAMIC_REFERENCE -> R.id.cb_dynamic_reference
+        VerselinkPrefs.KEY_VERSE_NUMBERS -> R.id.cb_verse_numbers
+        VerselinkPrefs.KEY_NEW_LINE_CHAPTERS -> R.id.cb_new_line_chapters
+        VerselinkPrefs.KEY_NEW_LINE_BOOKS -> R.id.cb_new_line_books
+        else -> null
     }
 
     private fun bindSwitchingStatus() {
@@ -207,11 +313,13 @@ class SettingsActivity : Activity() {
                 else R.string.switch_permission_missing
             )
         } catch (e: Exception) {
-            logCrash(e)
+            CrashLog.log(this, e)
         }
     }
 
     companion object {
         private const val REQUEST_IMPORT = 41
+        /** Sample rendered in the formatting preview. */
+        private const val PREVIEW_REFERENCE = "John 3:16-17"
     }
 }
