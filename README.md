@@ -58,7 +58,7 @@ machine, Gradle falls back to the debug key so a build always succeeds.
 
 ### Installing on a phone (no adb, no developer options)
 
-1. Copy `dist/VerseLink-1.0.4.apk` to the phone (USB, Drive, email...).
+1. Copy `dist/VerseLink-1.0.5.apk` to the phone (USB, Drive, email...).
 2. Tap it; accept the "install unknown apps" prompt when asked.
 3. Done. The selection-menu action works immediately with zero setup.
    Optional extras afterwards:
