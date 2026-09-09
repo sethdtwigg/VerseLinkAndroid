@@ -25,8 +25,11 @@ sharing the same parser behaviour and the same Bible XML data files.
   reference on first line, dynamic reference, verse numbers, new lines between
   chapters/books - with a live preview in Settings showing exactly what the
   current combination produces.
-- **Read-only sources**: where the platform cannot write the selection back
-  (non-editable views), the resolved verse goes to the clipboard instead.
+- **Clipboard**: where the platform cannot write the selection back
+  (non-editable views), the resolved verse goes to the clipboard instead. For
+  editable fields there is an optional "also copy verse to clipboard" setting -
+  PROCESS_TEXT gives no signal about whether an editor applied the result, so a
+  few browsers/webviews drop it silently and this leaves the verse pasteable.
 - **Optional VerseLink keyboard (IME)**: minimal keyboard that inserts a
   resolved verse at the cursor and hands control back to your normal keyboard.
   Useful in apps whose editors ignore PROCESS_TEXT results (some webviews).
@@ -130,6 +133,8 @@ parsing the real bundled KJV). On-device checks:
 | 16 | Delete translation | Settings -> Delete imported translation | Entry gone; bundled KJV still selectable |
 | 17 | Formatting preview | Toggle any formatting flag in Settings | Preview updates to match |
 | 18 | Multi-reference | Select `John 3:16; Romans 8:28` | Each verse carries its own label |
+| 19 | Also-copy off (default) | Replace a ref, then paste elsewhere | Clipboard unchanged |
+| 20 | Also-copy on | Settings -> Clipboard -> enable, replace a ref, paste | Verse both replaced and pasteable |
 
 ## Limitations & platform notes
 

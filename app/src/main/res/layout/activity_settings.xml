@@ -87,6 +87,27 @@
             android:layout_height="wrap_content"
             android:text="@string/pref_new_line_books" />
 
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="@string/pref_clipboard_header"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <CheckBox
+            android:id="@+id/cb_also_copy"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/pref_also_copy" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/pref_also_copy_hint"
+            android:textColor="?android:attr/textColorSecondary"
+            android:textSize="12sp" />
+
         <!-- Live sample so the six flags above explain themselves -->
         <TextView
             android:layout_width="match_parent"
