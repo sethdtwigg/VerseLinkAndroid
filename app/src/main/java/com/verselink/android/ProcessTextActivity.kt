@@ -52,11 +52,18 @@ class ProcessTextActivity : Activity() {
                         finishWithText(selected) // unchanged
                     }
                     readOnly -> {
+                        // Nothing else can happen here, so say what we did.
                         copyToClipboard(replacement)
                         Toast.makeText(this, R.string.copied_to_clipboard, Toast.LENGTH_SHORT).show()
                         finish()
                     }
-                    else -> finishWithText(replacement)
+                    else -> {
+                        // Opt-in safety net for editors that drop the result.
+                        // No toast: the replacement itself is the feedback, and
+                        // Android 13+ already confirms clipboard writes.
+                        if (VerselinkPrefs.alsoCopyToClipboard(this)) copyToClipboard(replacement)
+                        finishWithText(replacement)
+                    }
                 }
             }
         }

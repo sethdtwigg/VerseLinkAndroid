@@ -31,6 +31,9 @@
     <string name="pref_verse_numbers">Include verse numbers</string>
     <string name="pref_new_line_chapters">New line between chapters</string>
     <string name="pref_new_line_books">New line between books</string>
+    <string name="pref_clipboard_header">Clipboard</string>
+    <string name="pref_also_copy">Also copy verse to clipboard</string>
+    <string name="pref_also_copy_hint">Some editors (a few browsers and webviews) ignore the replacement. With this on, the verse is also copied so you can paste it. Read-only text is always copied.</string>
     <string name="pref_switching_header">Automatic keyboard switching (optional)</string>
     <string name="adb_instruction">adb shell pm grant com.verselink.android android.permission.WRITE_SECURE_SETTINGS</string>
     <string name="switch_permission_granted">Direct switching: AVAILABLE (keyboard restores itself after insertion)</string>

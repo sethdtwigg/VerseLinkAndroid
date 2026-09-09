@@ -21,6 +21,12 @@ object VerselinkPrefs {
     const val KEY_NEW_LINE_CHAPTERS = "newLineBetweenChapters"
     const val KEY_NEW_LINE_BOOKS = "newLineBetweenBooks"
 
+    /**
+     * Not a formatting flag: it changes what we DO with the result, so it is
+     * kept out of [FLAGS] (which maps 1:1 onto FormatterOptions).
+     */
+    const val KEY_ALSO_COPY = "alsoCopyToClipboard"
+
     data class Flag(val key: String, val default: Boolean)
 
     /**
@@ -46,6 +52,19 @@ object VerselinkPrefs {
         prefs(context).edit().putBoolean(key, value).apply()
         EngineProvider.invalidate(context)
     }
+
+    /**
+     * Copy the verse to the clipboard in addition to replacing the selection.
+     *
+     * PROCESS_TEXT is one-way: the host editor decides whether to apply the
+     * text we return, and standard TextView/EditText do, but some webviews and
+     * custom editors silently drop it. We get no signal either way, so there
+     * is nothing to detect and fall back from - this opt-in leaves the verse
+     * on the clipboard so it can be pasted when the replacement goes nowhere.
+     * Off by default: it clobbers the clipboard and, on Android 13+, shows the
+     * system clipboard confirmation on every use.
+     */
+    fun alsoCopyToClipboard(context: Context) = prefs(context).getBoolean(KEY_ALSO_COPY, false)
 
     /** Master switch for all VerseLink UI entry points. */
     fun isEnabled(context: Context) = prefs(context).getBoolean("enabled", true)

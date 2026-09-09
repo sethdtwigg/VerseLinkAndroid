@@ -60,6 +60,7 @@ class SettingsActivity : Activity() {
             bindImportButton()
             bindDeleteButton()
             bindFormattingChecks()
+            bindClipboardCheck()
             bindSwitchingStatus()
             refreshPreview()
 
@@ -301,6 +302,23 @@ class SettingsActivity : Activity() {
         VerselinkPrefs.KEY_NEW_LINE_CHAPTERS -> R.id.cb_new_line_chapters
         VerselinkPrefs.KEY_NEW_LINE_BOOKS -> R.id.cb_new_line_books
         else -> null
+    }
+
+    /**
+     * Bound on its own rather than through [VerselinkPrefs.FLAGS]: it does not
+     * feed FormatterOptions and does not change the preview, so it needs no
+     * preview refresh either.
+     */
+    private fun bindClipboardCheck() {
+        try {
+            val cb = findViewById<CheckBox>(R.id.cb_also_copy)
+            cb.isChecked = VerselinkPrefs.alsoCopyToClipboard(this)
+            cb.setOnCheckedChangeListener { _, checked ->
+                VerselinkPrefs.setFlag(this, VerselinkPrefs.KEY_ALSO_COPY, checked)
+            }
+        } catch (e: Exception) {
+            CrashLog.log(this, e)
+        }
     }
 
     private fun bindSwitchingStatus() {
